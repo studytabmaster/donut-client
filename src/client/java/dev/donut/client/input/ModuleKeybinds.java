@@ -13,7 +13,7 @@ import java.util.Set;
 public final class ModuleKeybinds {
     // Preserve the remaining module IDs used by GUI controls.
     public static final int FIRST_MODULE = 2;
-    public static final int MODULE_COUNT = 13;
+    public static final int MODULE_COUNT = 14;
     public static final int MODULE_LIMIT = FIRST_MODULE + MODULE_COUNT;
     private static final KeyMapping[] MODULES = new KeyMapping[MODULE_LIMIT];
     private static final boolean[] pressed = new boolean[MODULE_LIMIT];
