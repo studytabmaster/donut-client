@@ -97,7 +97,6 @@ public final class DonutScreen extends Screen {
     private int binding = -1;
     private int hoveredBinding = -1;
     private InputConstants.Key capturedKey;
-    // Row coordinates and IDs are scoped to the card currently being rendered.
     private int rowX, rowW;
     private String rowPrefix = "";
     private int settingsCursor;
@@ -111,7 +110,6 @@ public final class DonutScreen extends Screen {
 
     @Override
     protected void init() {
-        // Spectre lays out in framebuffer pixels, independently of Minecraft's GUI scale.
         float guiScale = (float) minecraft.getWindow().getGuiScale();
         float displayW = width * guiScale, displayH = height * guiScale;
         float fit = Math.min(1, Math.min(displayW / 960f, displayH / 620f));
@@ -119,8 +117,6 @@ public final class DonutScreen extends Screen {
         layoutUiScale = config.clickGuiStyle.scale;
         fontScale = (float) (Math.round(Math.clamp(canvasH / 1080f * layoutUiScale, .6, 3.5) * 20) / 20.0);
         float workspaceScale = Math.min(fontScale, Math.min(canvasW / 1000f, canvasH / 620f));
-        // Above the reference's 1080p size, enlarge geometry with the type so
-        // labels, fixed-height tiles and the header keep their original proportions.
         float zoom = Math.max(1, fontScale);
         W = Math.round(Math.min(canvasW - 32, 1320 * workspaceScale) / zoom);
         H = Math.round(Math.min(canvasH - 32, 830 * workspaceScale) / zoom);
@@ -216,7 +212,6 @@ public final class DonutScreen extends Screen {
         }
     }
 
-    // Geometry, palette and motion are ported from Spectre's renderWorkspaceFrame.
     private void drawFrame(GuiGraphics g) {
         for (int i = 8; i >= 1; i--) {
             float spread = 2.5f * fontScale * i;
@@ -307,7 +302,9 @@ public final class DonutScreen extends Screen {
     }
 
     private String moduleCategory(int index) {
-        return index == 3 || index == 6 ? "Blatant" : index >= 7 && index <= 9 ? "Streaming" : "Visual";
+        return index == 3 || index == 6 || index == 15 ? "Blatant"
+                : (index >= 7 && index <= 9) || index == 16 ? "Streaming"
+                : "Visual";
     }
 
     private void drawWorkspaceHeader(GuiGraphics g) {
@@ -437,7 +434,6 @@ public final class DonutScreen extends Screen {
             settingsCursor += s(46);
             section(g, "Configuration", 0);
             settingToggle(g, "favorite", "Favorite", 0, () -> favorite(index), () -> toggleFavorite(index));
-            // Preserve the existing binding/favorite control identities for keyboard navigation.
             Hit favoriteHit = hits.isEmpty() ? null : hits.getLast();
             if (favoriteHit != null && favoriteHit.id.equals(rowPrefix + "favorite")) {
                 hits.set(hits.size() - 1, new Hit("favorite" + index, favoriteHit.x, favoriteHit.y,
@@ -456,8 +452,11 @@ public final class DonutScreen extends Screen {
 
     private boolean matches(int index) {
         if (enabledOnly && !enabled(index)) return false;
-        if ((tab == 0 && (index == 3 || index == 6 || index >= 7 && index <= 9))
-                || (tab == 3 && index != 3 && index != 6) || (tab == 4 && (index < 7 || index > 9))) return false;
+        boolean inBlatant = index == 3 || index == 6 || index == 15;
+        boolean inStreaming = index == 7 || index == 8 || index == 9 || index == 16;
+        if (tab == 0 && (inBlatant || inStreaming)) return false;
+        if (tab == 3 && !inBlatant) return false;
+        if (tab == 4 && !inStreaming) return false;
         if (tab == 1 && !favorite(index)) return false;
         String words = switch (index) {
             case 2 -> "freecam free camera fly perspective spectator";
@@ -472,13 +471,17 @@ public final class DonutScreen extends Screen {
             case 12 -> "sound detector sounddetector audio player activity alarm warning chest piston machine machinery";
             case 13 -> "blockesp block esp ore ores seed predictor prediction deepslate emerald coal rare";
             case 14 -> "staff detector staffdetector moderator admin spectator invisible vanish presence roster";
+            case 15 -> "automine auto mine mining ore automatic deepslate emerald coal quarry";
+            case 16 -> "hide xp bar experience streaming streamer privacy overlay";
             default -> "autobuilder auto builder schematic litematic building materials navigation";
         };
         return words.contains(query.toLowerCase(Locale.ROOT).trim());
     }
 
     private void drawModuleSettings(GuiGraphics g, int index) {
-        if (index == 14) drawStaffDetectorSettings(g);
+        if (index == 16) drawHideXpBarSettings(g);
+        else if (index == 15) drawAutoMineSettings(g);
+        else if (index == 14) drawStaffDetectorSettings(g);
         else if (index == 13) drawBlockEspSettings(g);
         else if (index == 12) drawSoundDetectorSettings(g);
         else if (index == 11) drawLightDebugSettings(g);
@@ -491,6 +494,22 @@ public final class DonutScreen extends Screen {
         else if (index == 4) drawChunkFinderSettings(g, 0);
         else if (index == 3) drawAutoBuilderSettings(g, 0);
         else if (index == 2) drawFreecamSettings(g, 0);
+    }
+
+    private void drawAutoMineSettings(GuiGraphics g) {
+        section(g, "Targeting", 0);
+        help(g, "Uses BlockESP predictions to find and mine deepslate emerald and coal ore automatically.");
+        help(g, "Emerald is prioritized over coal, then nearest by distance from your position.");
+        help(g, "Requires BlockESP enabled and Ready. Movement and rotation are humanized to reduce detection.");
+        section(g, "Safety", 0);
+        help(g, "Stops when health is below 6, lava is within 3 blocks, Y < -60, or inventory is full.");
+        help(g, "Unreachable targets are blacklisted for 30 seconds before retry.");
+    }
+
+    private void drawHideXpBarSettings(GuiGraphics g) {
+        section(g, "Streaming privacy", 0);
+        help(g, "Hides the experience bar from your screen. Your character still earns XP normally.");
+        help(g, "Local overlay only. Other players and server data are unaffected.");
     }
 
     private void help(GuiGraphics g, String value) {
@@ -626,12 +645,22 @@ public final class DonutScreen extends Screen {
             case 12 -> "Warn about nearby interactions, players and machinery";
             case 13 -> "Predict deepslate emerald and coal from your world seed";
             case 14 -> "Observe known staff and possible hidden presence";
+            case 15 -> "Automatically mine predicted ores with priority";
+            case 16 -> "Hide the XP bar from your stream";
             default -> "Move through your world with vanilla flight";
         };
     }
 
     private void moduleIcon(GuiGraphics g, int index, int x, int y, int tint) {
-        if (index == 14) {
+        if (index == 16) {
+            outline(g, x, y + 9, 18, 5, 2, tint);
+            line(g, x + 1, y + 17, x + 17, y + 1, tint);
+        } else if (index == 15) {
+            line(g, x + 3, y + 3, x + 14, y + 14, tint);
+            line(g, x + 14, y + 14, x + 10, y + 16, tint);
+            line(g, x + 3, y + 3, x + 7, y + 1, tint);
+            line(g, x + 7, y + 1, x + 16, y + 10, tint);
+        } else if (index == 14) {
             outline(g, x, y + 4, 18, 10, 5, tint);
             outline(g, x + 7, y + 7, 4, 4, 2, tint);
         } else if (index == 12) {
@@ -670,10 +699,12 @@ public final class DonutScreen extends Screen {
         }
     }
 
-    private boolean enabled(int index) { return index == 14 ? config.staffDetector.enabled : index == 13 ? config.blockEsp.enabled : index == 12 ? config.soundDetector.enabled : index == 11 ? config.lightDebug.enabled : index == 10 ? config.amethyst.enabled : index == 9 ? config.hotbar.enabled : index == 8 ? config.nameHider.enabled : index == 7 ? config.progressBar.enabled : index == 6 ? FlyController.enabled() : index == 5 ? config.fullbright.enabled : index == 4 ? config.chunkFinder.enabled : index == 3 ? AutoBuilderController.get().isRunning() : index == 2 ? config.freecam.enabled : false; }
-    private boolean favorite(int index) { return index == 14 ? config.staffDetector.favorite : index == 13 ? config.blockEsp.favorite : index == 12 ? config.soundDetector.favorite : index == 11 ? config.lightDebug.favorite : index == 10 ? config.amethyst.favorite : index == 9 ? config.hotbar.favorite : index == 8 ? config.nameHider.favorite : index == 7 ? config.progressBar.favorite : index == 6 ? config.fly.favorite : index == 5 ? config.fullbright.favorite : index == 4 ? config.chunkFinder.favorite : index == 3 ? config.autoBuilder.favorite : index == 2 ? config.freecam.favorite : false; }
+    private boolean enabled(int index) { return index == 16 ? config.hideXpBar.enabled : index == 15 ? config.autoMine.enabled : index == 14 ? config.staffDetector.enabled : index == 13 ? config.blockEsp.enabled : index == 12 ? config.soundDetector.enabled : index == 11 ? config.lightDebug.enabled : index == 10 ? config.amethyst.enabled : index == 9 ? config.hotbar.enabled : index == 8 ? config.nameHider.enabled : index == 7 ? config.progressBar.enabled : index == 6 ? FlyController.enabled() : index == 5 ? config.fullbright.enabled : index == 4 ? config.chunkFinder.enabled : index == 3 ? AutoBuilderController.get().isRunning() : index == 2 ? config.freecam.enabled : false; }
+    private boolean favorite(int index) { return index == 16 ? config.hideXpBar.favorite : index == 15 ? config.autoMine.favorite : index == 14 ? config.staffDetector.favorite : index == 13 ? config.blockEsp.favorite : index == 12 ? config.soundDetector.favorite : index == 11 ? config.lightDebug.favorite : index == 10 ? config.amethyst.favorite : index == 9 ? config.hotbar.favorite : index == 8 ? config.nameHider.favorite : index == 7 ? config.progressBar.favorite : index == 6 ? config.fly.favorite : index == 5 ? config.fullbright.favorite : index == 4 ? config.chunkFinder.favorite : index == 3 ? config.autoBuilder.favorite : index == 2 ? config.freecam.favorite : false; }
     private void toggleFavorite(int index) {
-        if (index == 14) config.staffDetector.favorite = !config.staffDetector.favorite;
+        if (index == 16) config.hideXpBar.favorite = !config.hideXpBar.favorite;
+        else if (index == 15) config.autoMine.favorite = !config.autoMine.favorite;
+        else if (index == 14) config.staffDetector.favorite = !config.staffDetector.favorite;
         else if (index == 13) config.blockEsp.favorite = !config.blockEsp.favorite;
         else if (index == 12) config.soundDetector.favorite = !config.soundDetector.favorite;
         else if (index == 11) config.lightDebug.favorite = !config.lightDebug.favorite;
@@ -689,7 +720,11 @@ public final class DonutScreen extends Screen {
         if (tab == 1) contentProgress = 0;
     }
     private void toggleEnabled(int index) {
-        if (index == 14) {
+        if (index == 16) {
+            change(() -> config.hideXpBar.enabled = !config.hideXpBar.enabled);
+        } else if (index == 15) {
+            change(() -> config.autoMine.enabled = !config.autoMine.enabled);
+        } else if (index == 14) {
             change(() -> config.staffDetector.enabled = !config.staffDetector.enabled);
         } else if (index == 13) {
             change(() -> config.blockEsp.enabled = !config.blockEsp.enabled);
@@ -721,7 +756,7 @@ public final class DonutScreen extends Screen {
         }
     }
     private String name(int index) {
-        return switch (index) { case 2 -> "Freecam"; case 4 -> "Base Finder"; case 5 -> "Fullbright"; case 6 -> "Fly"; case 7 -> "Progress Bar"; case 8 -> "Name Hider"; case 9 -> "Hotbar"; case 10 -> "Amethyst Scanner"; case 11 -> "Light Debug"; case 12 -> "Sound Detector"; case 13 -> "BlockESP"; case 14 -> "Staff Detector"; default -> "AutoBuilder"; };
+        return switch (index) { case 2 -> "Freecam"; case 4 -> "Base Finder"; case 5 -> "Fullbright"; case 6 -> "Fly"; case 7 -> "Progress Bar"; case 8 -> "Name Hider"; case 9 -> "Hotbar"; case 10 -> "Amethyst Scanner"; case 11 -> "Light Debug"; case 12 -> "Sound Detector"; case 13 -> "BlockESP"; case 14 -> "Staff Detector"; case 15 -> "AutoMine"; case 16 -> "Hide XP Bar"; default -> "AutoBuilder"; };
     }
 
     private void drawHotbarSettings(GuiGraphics g, int ignored) {
@@ -1384,7 +1419,6 @@ public final class DonutScreen extends Screen {
     }
 
     private void drawColorEditor(GuiGraphics g) {
-        // Modal hit testing replaces the underlying settings' controls.
         hits.clear();
         round(g, 0, 0, W, H, corner(18), 0xB0120D09);
         int w = 318, h = 252, x = (W - w) / 2, y = (H - h) / 2;
@@ -1509,7 +1543,6 @@ public final class DonutScreen extends Screen {
             Hit h = hits.get(i);
             if (!h.contains(x, y)) continue;
             if (rightClick) {
-                // A module tile also supports right-click selection.
                 if (h.secondary == null) continue;
                 h.secondary.run();
             } else if (h.drag != null) { dragging = h; h.move(x, y); }
@@ -1560,7 +1593,6 @@ public final class DonutScreen extends Screen {
     @Override
     public boolean keyPressed(KeyEvent event) {
         if (closing) return true;
-        // A held capture/cancel key must not repeat into ordinary GUI navigation.
         InputConstants.Key pressed = InputConstants.getKey(event);
         if (pressed.equals(openingKey)) return true;
         if (pressed.equals(capturedKey)) return true;
@@ -1624,7 +1656,6 @@ public final class DonutScreen extends Screen {
                     String pasted = minecraft.keyboardHandler.getClipboard().trim();
                     if (pasted.matches("[0-9]+")) {
                         String next = (replaceBasesFound ? "" : basesFoundDraft) + pasted;
-                        // Remove leading zeroes before bounding long input to a safe integer.
                         next = next.replaceFirst("^0+(?!$)", "");
                         basesFoundDraft = next.length() > 18 ? Integer.toString(ProgressBarSettings.MAX_BASES_FOUND) : next;
                         replaceBasesFound = false;
@@ -1662,163 +1693,4 @@ public final class DonutScreen extends Screen {
             if (event.key() == GLFW.GLFW_KEY_C && event.hasControlDown()) {
                 minecraft.keyboardHandler.setClipboard("#" + colorEditor.hex); return true;
             }
-            if (event.key() == GLFW.GLFW_KEY_BACKSPACE) {
-                colorEditor.hex = colorEditor.replaceHex ? "" : colorEditor.hex.substring(0, Math.max(0, colorEditor.hex.length() - 1));
-                colorEditor.replaceHex = false;
-                return true;
-            }
-            if (event.key() == GLFW.GLFW_KEY_ENTER) { closeColor(); return true; }
-            if (event.key() == GLFW.GLFW_KEY_A && (event.modifiers() & GLFW.GLFW_MOD_CONTROL) != 0) {
-                colorEditor.replaceHex = true; return true;
-            }
-        }
-        if (searchFocused) {
-            if (event.key() == GLFW.GLFW_KEY_V && event.hasControlDown()) {
-                String pasted = minecraft.keyboardHandler.getClipboard().replaceAll("[\\p{Cntrl}]", "");
-                query = (query + pasted).substring(0, Math.min(64, query.length() + pasted.length())); contentProgress = 0; return true;
-            }
-            if (event.key() == GLFW.GLFW_KEY_BACKSPACE) { query = removeLastCharacter(query); contentProgress = 0; return true; }
-            if (event.key() == GLFW.GLFW_KEY_ENTER) { searchFocused = false; return true; }
-            if (event.key() == GLFW.GLFW_KEY_A && (event.modifiers() & GLFW.GLFW_MOD_CONTROL) != 0) { query = ""; contentProgress = 0; return true; }
-        }
-        if (event.key() == GLFW.GLFW_KEY_TAB && !hits.isEmpty()) {
-            int index = -1;
-            for (int i = 0; i < hits.size(); i++) if (hits.get(i).id.equals(keyboardFocus)) index = i;
-            int direction = (event.modifiers() & GLFW.GLFW_MOD_SHIFT) != 0 ? -1 : 1;
-            keyboardFocus = hits.get(Math.floorMod(index + direction, hits.size())).id;
-            searchFocused = false;
-            return true;
-        }
-        if (keyboardFocus != null && (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_SPACE)) {
-            hits.stream().filter(h -> h.id.equals(keyboardFocus)).findFirst().ifPresent(h -> {
-                if (h.secondary != null && (event.modifiers() & GLFW.GLFW_MOD_SHIFT) != 0) h.secondary.run();
-                else if (h.action != null) h.action.run();
-            });
-            // Enter/Space that opens capture is not itself the new binding on repeat.
-            if (binding >= 0) capturedKey = pressed;
-            return true;
-        }
-        if (keyboardFocus != null && (event.key() == GLFW.GLFW_KEY_LEFT || event.key() == GLFW.GLFW_KEY_RIGHT)) {
-            hits.stream().filter(h -> h.id.equals(keyboardFocus)).findFirst().ifPresent(h -> {
-                if (h.nudge != null) h.nudge.accept(event.key() == GLFW.GLFW_KEY_RIGHT ? 1 : -1);
-            });
-            return true;
-        }
-        if (colorEditor == null && !scannerMethodMenu && !searchFocused) {
-            if (event.key() == GLFW.GLFW_KEY_PAGE_DOWN || event.key() == GLFW.GLFW_KEY_PAGE_UP) {
-                if (selectedModule >= 0 || tab == 2 || tab == 6) detailScrollTarget = Math.clamp(detailScrollTarget + (event.key() == GLFW.GLFW_KEY_PAGE_DOWN ? s(170) : -s(170)), 0, Math.max(0, detailContentHeight - (detailBottom - detailTop)));
-                else scrollTarget = Math.clamp(scrollTarget + (event.key() == GLFW.GLFW_KEY_PAGE_DOWN ? 170 : -170), 0, Math.max(0, contentHeight - (BOTTOM - TOP)));
-                keyboardFocus = null; return true;
-            }
-            if (event.key() == GLFW.GLFW_KEY_HOME) { if (selectedModule >= 0 || tab == 2 || tab == 6) detailScrollTarget = 0; else scrollTarget = 0; return true; }
-            if (event.key() == GLFW.GLFW_KEY_END) { if (selectedModule >= 0 || tab == 2 || tab == 6) detailScrollTarget = Math.max(0, detailContentHeight - (detailBottom - detailTop)); else scrollTarget = Math.max(0, contentHeight - (BOTTOM - TOP)); return true; }
-        }
-        return false;
-    }
-
-    @Override
-    public boolean keyReleased(KeyEvent event) {
-        if (InputConstants.getKey(event).equals(openingKey)) openingKey = null;
-        if (InputConstants.getKey(event).equals(capturedKey)) capturedKey = null;
-        return super.keyReleased(event);
-    }
-
-    @Override
-    public boolean charTyped(CharacterEvent event) {
-        if (closing || binding >= 0 || capturedKey != null) return true;
-        if (editingTimer >= 0) {
-            if (event.codepoint() >= '0' && event.codepoint() <= '9' || event.codepoint() == ':') {
-                if (replaceTimerDuration) { timerDurationDraft = ""; replaceTimerDuration = false; }
-                if (timerDurationDraft.length() < 8) timerDurationDraft += event.codepointAsString();
-                timerError = -1;
-            }
-            return true;
-        }
-        if (basesFoundDraft != null) {
-            if (event.codepoint() >= '0' && event.codepoint() <= '9') {
-                if (replaceBasesFound) { basesFoundDraft = ""; replaceBasesFound = false; }
-                if (basesFoundDraft.length() < 18) basesFoundDraft += event.codepointAsString();
-            }
-            return true;
-        }
-        if (colorEditor != null && colorEditor.hexFocused) {
-            int c = event.codepoint();
-            if (Character.digit(c, 16) >= 0 && c < 128) {
-                if (colorEditor.replaceHex) { colorEditor.hex = ""; colorEditor.replaceHex = false; }
-                if (colorEditor.hex.length() < 6) colorEditor.hex += Character.toString(c).toUpperCase(Locale.ROOT);
-                if (colorEditor.hex.length() == 6) { colorEditor.setter.accept(Integer.parseInt(colorEditor.hex, 16)); dirty = true; flush(); }
-            }
-            return true;
-        }
-        if (searchFocused && event.isAllowedChatCharacter() && query.length() < 64) {
-            query += event.codepointAsString();
-            contentProgress = 0;
-            return true;
-        }
-        return false;
-    }
-
-    private void change(Runnable action) { action.run(); dirty = true; flush(); }
-    private void flush() { if (dirty) { save.run(); dirty = false; } }
-    private String removeFirstCharacter(String value) { return value.isEmpty() ? value : value.substring(value.offsetByCodePoints(0, 1)); }
-    private String removeLastCharacter(String value) { return value.isEmpty() ? value : value.substring(0, value.offsetByCodePoints(value.length(), -1)); }
-
-    @Override
-    public void tick() {
-        // Complete removal during the input tick so cleanup cannot consume the next fresh key press.
-        if (closing && screenProgress == 0 && minecraft.screen == this) minecraft.setScreen(null);
-    }
-
-    @Override
-    public void onClose() {
-        if (closing) return;
-        commitBasesFound();
-        if (!commitTimerDuration()) cancelTimerDuration();
-        flush();
-        closing = true;
-        dragging = null;
-        binding = -1;
-        keyboardFocus = null;
-        searchFocused = false;
-    }
-
-    @Override
-    public void removed() {
-        commitBasesFound();
-        if (!commitTimerDuration()) cancelTimerDuration();
-        binding = -1;
-        capturedKey = null;
-        ModuleKeybinds.suppressUntilReleased(minecraft);
-        flush();
-    }
-
-    @Override
-    public boolean isPauseScreen() { return false; }
-
-    private record Hit(String id, int x, int y, int w, int h, Runnable action, Runnable secondary, DoubleConsumer drag, boolean vertical, IntConsumer nudge) {
-        boolean contains(double mx, double my) { return mx >= x && my >= y && mx < x + w && my < y + h; }
-        void move(double mx, double my) { drag.accept(vertical ? (my - y) / h : (mx - x) / w); }
-    }
-
-    private record Clip(int left, int right, int top, int bottom) { }
-
-    private final class ColorEditor {
-        final String title;
-        final IntSupplier getter;
-        final IntConsumer setter;
-        String hex;
-        boolean hexFocused;
-        boolean replaceHex;
-        ColorEditor(String title, IntSupplier getter, IntConsumer setter) {
-            this.title = title;
-            this.getter = getter;
-            this.setter = setter;
-            this.hex = DonutScreen.this.hex(getter.getAsInt()).substring(1);
-        }
-        void set(int color) {
-            setter.accept(color & 0xFFFFFF);
-            hex = DonutScreen.this.hex(color).substring(1);
-            dirty = true;
-        }
-    }
-}
+            if (event.key() == GLFW.GL
