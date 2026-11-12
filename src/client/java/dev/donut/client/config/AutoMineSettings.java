@@ -1,4 +1,4 @@
-// language: Java, file: src/client/java/dev/donut/client/config/AutoMineSettings.java
+
 package dev.donut.client.config;
 
 public final class AutoMineSettings {
