@@ -1,19 +1,33 @@
 package dev.donut.client.automine;
 
+import java.util.Random;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
 
 public final class MovementController {
+    private static final Random RNG = new Random();
     private static Vec3 lastPos;
     private static long lastPosChange;
+    private static int strafeTicks;
+    private static float strafeSign;
 
     public static void stepTo(Minecraft client, BlockPos next) {
         Vec3 target = Vec3.atCenterOf(next);
         Vec3 diff = target.subtract(client.player.position());
-        float yaw = (float) Math.toDegrees(Math.atan2(-diff.x, diff.z));
-        client.player.setYRot(yaw);
+        float baseYaw = (float) Math.toDegrees(Math.atan2(-diff.x, diff.z));
+
+        // Occasional small lateral deviation.
+        if (strafeTicks <= 0) {
+            strafeSign = RNG.nextBoolean() ? 1 : -1;
+            strafeTicks = 8 + RNG.nextInt(12);
+        }
+        strafeTicks--;
+        float yawNoise = (RNG.nextFloat() - 0.5f) * 1.2f + strafeSign * 0.6f;
+        client.player.setYRot(baseYaw + yawNoise);
         client.options.keyUp.setDown(true);
+        client.options.keyLeft.setDown(strafeSign < 0 && RNG.nextFloat() < 0.08f);
+        client.options.keyRight.setDown(strafeSign > 0 && RNG.nextFloat() < 0.08f);
 
         boolean needJump = next.getY() > client.player.blockPosition().getY();
         Vec3 pos = client.player.position();
@@ -21,14 +35,21 @@ public final class MovementController {
         if (lastPos == null || pos.distanceToSqr(lastPos) > 0.01) {
             lastPos = pos;
             lastPosChange = now;
-        } else if (now - lastPosChange > 500) {
+        } else if (now - lastPosChange > 600) {
             needJump = true;
         }
         client.options.keyJump.setDown(needJump);
+
+        // Brief pause to break constant-velocity movement.
+        if (RNG.nextFloat() < 0.015f) {
+            client.options.keyUp.setDown(false);
+        }
     }
 
     public static void reset() {
         lastPos = null;
         lastPosChange = 0;
+        strafeTicks = 0;
+        strafeSign = 0;
     }
 }
