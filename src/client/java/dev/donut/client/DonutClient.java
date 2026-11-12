@@ -1,4 +1,3 @@
-// language: Java, file: src/client/java/dev/donut/client/DonutClient.java
 package dev.donut.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
@@ -213,4 +212,61 @@ public final class DonutClient implements ClientModInitializer {
             }
         });
 
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "status"), (graphics, delta) -> {
+            Minecraft client = Minecraft.getInstance();
+            if (!config.showHud || client.player == null || client.screen != null || client.options.hideGui) {
+                ModuleArrayList.reset();
+                return;
+            }
+            ModuleArrayList.render(graphics, client.font, client.getWindow().getGuiScaledWidth(), config, freecam.isActive());
+            AutoBuilderHud.render(graphics, client.font, client.getWindow().getGuiScaledHeight(), config);
+        });
+
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "progress_bar"), (graphics, delta) -> {
+            Minecraft client = Minecraft.getInstance();
+            if (!config.progressBar.enabled || client.player == null || client.screen != null || client.options.hideGui) return;
+            ProgressBarHud.render(graphics, config, config.progressBar.completedStages);
+        });
+
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "base_finder_inspect"),
+                (graphics, delta) -> BaseFinderPanel.render(graphics, config, chunkScanner));
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "sound_alerts"), (graphics, delta) ->
+                dev.donut.client.gui.SoundAlertHud.render(graphics, config, soundDetector.alerts()));
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "block_esp"), (graphics, delta) ->
+                BlockEspHud.render(graphics, config, blockEsp));
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "staff_detector"), (graphics, delta) ->
+                dev.donut.client.gui.StaffDetectorHud.render(graphics, config, staffDetector));
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            staffDetector.disconnect();
+            blockEsp.disconnect();
+            soundDetector.disconnect();
+            chunkScanner.clear();
+            amethystScanner.clear();
+            lightDebug.clear();
+            freecam.disable();
+            fly.clientDisconnected(handler, client);
+            autoBuilder.disconnect();
+            autoMine.close();
+        });
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
+            ProgressTimers.captureAndPause(config);
+            fullbright.close();
+            freecam.disable();
+            fly.disable();
+            autoBuilder.disconnect();
+            save();
+            lightDebug.close();
+            blockEsp.close();
+            soundDetector.disconnect();
+            staffDetector.disconnect();
+            renderer.close();
+            autoMine.close();
+        });
+    }
+
+    private KeyMapping bind(String name, int key, KeyMapping.Category category) {
+        return KeyBindingHelper.registerKeyBinding(new KeyMapping("key.donut." + name, InputConstants.Type.KEYSYM, key, category));
+    }
+
+    private void save() { store.save(config); }
+}
