@@ -1,3 +1,4 @@
+// language: Java, file: src/client/java/dev/donut/client/input/ModuleKeybinds.java
 package dev.donut.client.input;
 
 import com.mojang.blaze3d.platform.InputConstants;
@@ -11,9 +12,8 @@ import java.util.Set;
 
 /** The click GUI edits the same mappings exposed in Minecraft's Controls screen. */
 public final class ModuleKeybinds {
-    // Preserve the remaining module IDs used by GUI controls.
     public static final int FIRST_MODULE = 2;
-    public static final int MODULE_COUNT = 14;
+    public static final int MODULE_COUNT = 15;
     public static final int MODULE_LIMIT = FIRST_MODULE + MODULE_COUNT;
     private static final KeyMapping[] MODULES = new KeyMapping[MODULE_LIMIT];
     private static final boolean[] pressed = new boolean[MODULE_LIMIT];
@@ -25,7 +25,8 @@ public final class ModuleKeybinds {
     public static void initialize(KeyMapping freecam, KeyMapping autoBuilder, KeyMapping chunkFinder,
                                   KeyMapping fullbright, KeyMapping fly, KeyMapping progressBar,
                                   KeyMapping nameHider, KeyMapping hotbar, KeyMapping amethyst, KeyMapping lightDebug,
-                                  KeyMapping soundDetector, KeyMapping blockEsp, KeyMapping staffDetector) {
+                                  KeyMapping soundDetector, KeyMapping blockEsp, KeyMapping staffDetector,
+                                  KeyMapping autoMine, KeyMapping hideXpBar) {
         Arrays.fill(MODULES, null);
         MODULES[2] = freecam;
         MODULES[3] = autoBuilder;
@@ -40,6 +41,8 @@ public final class ModuleKeybinds {
         MODULES[12] = soundDetector;
         MODULES[13] = blockEsp;
         MODULES[14] = staffDetector;
+        MODULES[15] = autoMine;
+        MODULES[16] = hideXpBar;
         Arrays.fill(pressed, false);
         heldInputs.clear();
         discardNextTick = false;
@@ -60,19 +63,16 @@ public final class ModuleKeybinds {
         discardNextTick = true;
     }
 
-    /** Drain every tick, even in menus; native key repeat must not toggle a module repeatedly. */
     public static boolean consumePress(Minecraft client, int index) {
         KeyMapping mapping = mapping(index);
         if (mapping == null) return false;
         boolean clicked = false;
         while (mapping.consumeClick()) clicked = true;
         boolean firstPress = clicked && !pressed[index];
-        // A short press released between ticks still has a queued click and fires once.
         pressed[index] = isHeld(client, InputConstants.getKey(mapping.saveString())) && (pressed[index] || clicked);
         return firstPress;
     }
 
-    /** Keep the input that assigned a binding or closed the menu from toggling a module. */
     public static void suppressUntilReleased(Minecraft client) {
         for (KeyMapping mapping : MODULES) {
             if (mapping == null) continue;
@@ -90,7 +90,6 @@ public final class ModuleKeybinds {
         if (isHeld(client, key)) heldInputs.add(key);
     }
 
-    /** Call once each client tick, and consume queued mapping clicks even when blocked. */
     public static boolean inputBlocked(Minecraft client) {
         boolean blocked = client.screen != null || discardNextTick || !heldInputs.isEmpty();
         discardNextTick = false;
@@ -106,7 +105,6 @@ public final class ModuleKeybinds {
         if (key.getType() == InputConstants.Type.KEYSYM) {
             return InputConstants.isKeyDown(client.getWindow(), key.getValue());
         }
-        // GLFW exposes polling by key symbol, so resolve unusual scancode-only keys first.
         for (int code = GLFW.GLFW_KEY_SPACE; code <= GLFW.GLFW_KEY_LAST; code++) {
             if (validKeySymbol(code) && GLFW.glfwGetKeyScancode(code) == key.getValue()
                     && InputConstants.isKeyDown(client.getWindow(), code)) return true;
