@@ -15,7 +15,7 @@ import net.minecraft.client.gui.GuiGraphics;
 /** Spectre's connected, width-sorted module rows bound to Donut's active modules. */
 public final class ModuleArrayList {
     private static final String[] NAMES = {"Freecam", "AutoBuilder", "Base Finder",
-            "Fullbright", "Fly", "Progress Bar", "Name Hider", "Hotbar", "Amethyst Scanner", "Light Debug", "Sound Detector", "BlockESP", "Staff Detector"};
+            "Fullbright", "Fly", "Progress Bar", "Name Hider", "Hotbar", "Amethyst Scanner", "Light Debug", "Sound Detector", "BlockESP", "Staff Detector", "AutoMine", "Hide XP Bar"};
     private static final float[] animation = new float[NAMES.length];
     private static long lastFrame;
     private static List<Row> rows = List.of();
@@ -38,7 +38,8 @@ public final class ModuleArrayList {
         boolean[] enabled = {freecamActive,
                 AutoBuilderController.get().isRunning(), config.chunkFinder.enabled, config.fullbright.enabled,
                 FlyController.getInstance() != null && FlyController.getInstance().isActive(),
-                config.progressBar.enabled, config.nameHider.enabled, config.hotbar.enabled, config.amethyst.enabled, config.lightDebug.enabled, config.soundDetector.enabled, config.blockEsp.enabled, config.staffDetector.enabled};
+                config.progressBar.enabled, config.nameHider.enabled, config.hotbar.enabled, config.amethyst.enabled, config.lightDebug.enabled, config.soundDetector.enabled, config.blockEsp.enabled, config.staffDetector.enabled,
+                config.autoMine.enabled, config.hideXpBar.enabled};
         float k = config.clickGuiStyle.animationSpeed == 0 ? 1 : 1 - (float) Math.exp(-12 * dt * config.clickGuiStyle.animationSpeed);
         float previousFontScale = WorkspacePaint.pushScale(s);
         g.pose().pushMatrix();
