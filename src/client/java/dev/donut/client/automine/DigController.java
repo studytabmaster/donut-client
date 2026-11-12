@@ -1,4 +1,3 @@
-// language: Java, file: src/client/java/dev/donut/client/automine/DigController.java
 package dev.donut.client.automine;
 
 import net.minecraft.client.Minecraft;
@@ -25,10 +24,17 @@ public final class DigController {
 
     public static void dig(Minecraft client, BlockPos pos) {
         if (client.gameMode == null) return;
-        Direction dir = Direction.getNearest(
-            client.player.getViewVector(1.0f).x,
-            client.player.getViewVector(1.0f).y,
-            client.player.getViewVector(1.0f).z);
+        Direction dir = faceToward(client.player.getEyePosition(), pos);
         client.gameMode.continueDestroyBlock(pos, dir);
+    }
+
+    private static Direction faceToward(Vec3 eye, BlockPos pos) {
+        Vec3 diff = Vec3.atCenterOf(pos).subtract(eye);
+        double ax = Math.abs(diff.x);
+        double ay = Math.abs(diff.y);
+        double az = Math.abs(diff.z);
+        if (ax >= ay && ax >= az) return diff.x > 0 ? Direction.WEST : Direction.EAST;
+        if (ay >= ax && ay >= az) return diff.y > 0 ? Direction.DOWN : Direction.UP;
+        return diff.z > 0 ? Direction.NORTH : Direction.SOUTH;
     }
 }
