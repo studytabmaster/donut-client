@@ -1,3 +1,4 @@
+// language: Java, file: src/client/java/dev/donut/client/config/ClientConfig.java
 package dev.donut.client.config;
 
 public final class ClientConfig {
@@ -15,11 +16,12 @@ public final class ClientConfig {
     public ProgressBarSettings progressBar = new ProgressBarSettings();
     public NameHiderSettings nameHider = new NameHiderSettings();
     public HotbarSettings hotbar = new HotbarSettings();
+    public AutoMineSettings autoMine = new AutoMineSettings();
+    public HideXpBarSettings hideXpBar = new HideXpBarSettings();
     public int accentColor = 0x56DCCB;
     public ClickGuiStyle clickGuiStyle = new ClickGuiStyle();
     public boolean clickGuiParticles = true;
     public boolean showHud = true;
-
 
     public void sanitize() {
         if (clickGuiStyle == null) clickGuiStyle = new ClickGuiStyle();
@@ -45,6 +47,10 @@ public final class ClientConfig {
         staffDetector.sanitize();
         if (blockEsp == null) blockEsp = new BlockEspSettings();
         blockEsp.sanitize();
+        if (autoMine == null) autoMine = new AutoMineSettings();
+        autoMine.sanitize();
+        if (hideXpBar == null) hideXpBar = new HideXpBarSettings();
+        hideXpBar.sanitize();
         progressBar.sanitize();
         hotbar.sanitize();
         accentColor &= 0xFFFFFF;
