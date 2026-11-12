@@ -1693,4 +1693,161 @@ public final class DonutScreen extends Screen {
             if (event.key() == GLFW.GLFW_KEY_C && event.hasControlDown()) {
                 minecraft.keyboardHandler.setClipboard("#" + colorEditor.hex); return true;
             }
-            if (event.key() == GLFW.GL
+            if (event.key() == GLFW.GLFW_KEY_BACKSPACE) {
+                colorEditor.hex = colorEditor.replaceHex ? "" : colorEditor.hex.substring(0, Math.max(0, colorEditor.hex.length() - 1));
+                colorEditor.replaceHex = false;
+                return true;
+            }
+            if (event.key() == GLFW.GLFW_KEY_ENTER) { closeColor(); return true; }
+            if (event.key() == GLFW.GLFW_KEY_A && (event.modifiers() & GLFW.GLFW_MOD_CONTROL) != 0) {
+                colorEditor.replaceHex = true; return true;
+            }
+        }
+        if (searchFocused) {
+            if (event.key() == GLFW.GLFW_KEY_V && event.hasControlDown()) {
+                String pasted = minecraft.keyboardHandler.getClipboard().replaceAll("[\\p{Cntrl}]", "");
+                query = (query + pasted).substring(0, Math.min(64, query.length() + pasted.length())); contentProgress = 0; return true;
+            }
+            if (event.key() == GLFW.GLFW_KEY_BACKSPACE) { query = removeLastCharacter(query); contentProgress = 0; return true; }
+            if (event.key() == GLFW.GLFW_KEY_ENTER) { searchFocused = false; return true; }
+            if (event.key() == GLFW.GLFW_KEY_A && (event.modifiers() & GLFW.GLFW_MOD_CONTROL) != 0) { query = ""; contentProgress = 0; return true; }
+        }
+        if (event.key() == GLFW.GLFW_KEY_TAB && !hits.isEmpty()) {
+            int index = -1;
+            for (int i = 0; i < hits.size(); i++) if (hits.get(i).id.equals(keyboardFocus)) index = i;
+            int direction = (event.modifiers() & GLFW.GLFW_MOD_SHIFT) != 0 ? -1 : 1;
+            keyboardFocus = hits.get(Math.floorMod(index + direction, hits.size())).id;
+            searchFocused = false;
+            return true;
+        }
+        if (keyboardFocus != null && (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_SPACE)) {
+            hits.stream().filter(h -> h.id.equals(keyboardFocus)).findFirst().ifPresent(h -> {
+                if (h.secondary != null && (event.modifiers() & GLFW.GLFW_MOD_SHIFT) != 0) h.secondary.run();
+                else if (h.action != null) h.action.run();
+            });
+            if (binding >= 0) capturedKey = pressed;
+            return true;
+        }
+        if (keyboardFocus != null && (event.key() == GLFW.GLFW_KEY_LEFT || event.key() == GLFW.GLFW_KEY_RIGHT)) {
+            hits.stream().filter(h -> h.id.equals(keyboardFocus)).findFirst().ifPresent(h -> {
+                if (h.nudge != null) h.nudge.accept(event.key() == GLFW.GLFW_KEY_RIGHT ? 1 : -1);
+            });
+            return true;
+        }
+        if (colorEditor == null && !scannerMethodMenu && !searchFocused) {
+            if (event.key() == GLFW.GLFW_KEY_PAGE_DOWN || event.key() == GLFW.GLFW_KEY_PAGE_UP) {
+                if (selectedModule >= 0 || tab == 2 || tab == 6) detailScrollTarget = Math.clamp(detailScrollTarget + (event.key() == GLFW.GLFW_KEY_PAGE_DOWN ? s(170) : -s(170)), 0, Math.max(0, detailContentHeight - (detailBottom - detailTop)));
+                else scrollTarget = Math.clamp(scrollTarget + (event.key() == GLFW.GLFW_KEY_PAGE_DOWN ? 170 : -170), 0, Math.max(0, contentHeight - (BOTTOM - TOP)));
+                keyboardFocus = null; return true;
+            }
+            if (event.key() == GLFW.GLFW_KEY_HOME) { if (selectedModule >= 0 || tab == 2 || tab == 6) detailScrollTarget = 0; else scrollTarget = 0; return true; }
+            if (event.key() == GLFW.GLFW_KEY_END) { if (selectedModule >= 0 || tab == 2 || tab == 6) detailScrollTarget = Math.max(0, detailContentHeight - (detailBottom - detailTop)); else scrollTarget = Math.max(0, contentHeight - (BOTTOM - TOP)); return true; }
+        }
+        return false;
+    }
+
+    @Override
+    public boolean keyReleased(KeyEvent event) {
+        if (InputConstants.getKey(event).equals(openingKey)) openingKey = null;
+        if (InputConstants.getKey(event).equals(capturedKey)) capturedKey = null;
+        return super.keyReleased(event);
+    }
+
+    @Override
+    public boolean charTyped(CharacterEvent event) {
+        if (closing || binding >= 0 || capturedKey != null) return true;
+        if (editingTimer >= 0) {
+            if (event.codepoint() >= '0' && event.codepoint() <= '9' || event.codepoint() == ':') {
+                if (replaceTimerDuration) { timerDurationDraft = ""; replaceTimerDuration = false; }
+                if (timerDurationDraft.length() < 8) timerDurationDraft += event.codepointAsString();
+                timerError = -1;
+            }
+            return true;
+        }
+        if (basesFoundDraft != null) {
+            if (event.codepoint() >= '0' && event.codepoint() <= '9') {
+                if (replaceBasesFound) { basesFoundDraft = ""; replaceBasesFound = false; }
+                if (basesFoundDraft.length() < 18) basesFoundDraft += event.codepointAsString();
+            }
+            return true;
+        }
+        if (colorEditor != null && colorEditor.hexFocused) {
+            int c = event.codepoint();
+            if (Character.digit(c, 16) >= 0 && c < 128) {
+                if (colorEditor.replaceHex) { colorEditor.hex = ""; colorEditor.replaceHex = false; }
+                if (colorEditor.hex.length() < 6) colorEditor.hex += Character.toString(c).toUpperCase(Locale.ROOT);
+                if (colorEditor.hex.length() == 6) { colorEditor.setter.accept(Integer.parseInt(colorEditor.hex, 16)); dirty = true; flush(); }
+            }
+            return true;
+        }
+        if (searchFocused && event.isAllowedChatCharacter() && query.length() < 64) {
+            query += event.codepointAsString();
+            contentProgress = 0;
+            return true;
+        }
+        return false;
+    }
+
+    private void change(Runnable action) { action.run(); dirty = true; flush(); }
+    private void flush() { if (dirty) { save.run(); dirty = false; } }
+    private String removeFirstCharacter(String value) { return value.isEmpty() ? value : value.substring(value.offsetByCodePoints(0, 1)); }
+    private String removeLastCharacter(String value) { return value.isEmpty() ? value : value.substring(0, value.offsetByCodePoints(value.length(), -1)); }
+
+    @Override
+    public void tick() {
+        if (closing && screenProgress == 0 && minecraft.screen == this) minecraft.setScreen(null);
+    }
+
+    @Override
+    public void onClose() {
+        if (closing) return;
+        commitBasesFound();
+        if (!commitTimerDuration()) cancelTimerDuration();
+        flush();
+        closing = true;
+        dragging = null;
+        binding = -1;
+        keyboardFocus = null;
+        searchFocused = false;
+    }
+
+    @Override
+    public void removed() {
+        commitBasesFound();
+        if (!commitTimerDuration()) cancelTimerDuration();
+        binding = -1;
+        capturedKey = null;
+        ModuleKeybinds.suppressUntilReleased(minecraft);
+        flush();
+    }
+
+    @Override
+    public boolean isPauseScreen() { return false; }
+
+    private record Hit(String id, int x, int y, int w, int h, Runnable action, Runnable secondary, DoubleConsumer drag, boolean vertical, IntConsumer nudge) {
+        boolean contains(double mx, double my) { return mx >= x && my >= y && mx < x + w && my < y + h; }
+        void move(double mx, double my) { drag.accept(vertical ? (my - y) / h : (mx - x) / w); }
+    }
+
+    private record Clip(int left, int right, int top, int bottom) { }
+
+    private final class ColorEditor {
+        final String title;
+        final IntSupplier getter;
+        final IntConsumer setter;
+        String hex;
+        boolean hexFocused;
+        boolean replaceHex;
+        ColorEditor(String title, IntSupplier getter, IntConsumer setter) {
+            this.title = title;
+            this.getter = getter;
+            this.setter = setter;
+            this.hex = DonutScreen.this.hex(getter.getAsInt()).substring(1);
+        }
+        void set(int color) {
+            setter.accept(color & 0xFFFFFF);
+            hex = DonutScreen.this.hex(color).substring(1);
+            dirty = true;
+        }
+    }
+}
