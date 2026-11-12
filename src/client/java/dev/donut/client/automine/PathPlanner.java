@@ -1,4 +1,3 @@
-// language: Java, file: src/client/java/dev/donut/client/automine/PathPlanner.java
 package dev.donut.client.automine;
 
 import java.util.Comparator;
@@ -9,9 +8,11 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 
 public final class PathPlanner {
-    private static final int MAX_NODES = 5000;
+    private static final int MAX_NODES = 50000;
     private static final BlockPos[] NEIGHBORS = {
         new BlockPos(1, 0, 0), new BlockPos(-1, 0, 0),
         new BlockPos(0, 0, 1), new BlockPos(0, 0, -1),
@@ -30,13 +31,14 @@ public final class PathPlanner {
 
         while (!open.isEmpty() && visited++ < MAX_NODES) {
             Node n = open.poll();
-            if (n.pos.equals(goal) || n.pos.distManhattan(goal) <= 3) {
+            if (n.pos.distManhattan(goal) <= 3) {
                 return reconstruct(cameFrom, n.pos);
             }
             for (BlockPos off : NEIGHBORS) {
                 BlockPos next = n.pos.offset(off);
-                if (!canStand(client, next)) continue;
-                double tentative = gScore.get(n.pos) + cost(off);
+                if (!canTraverse(client, next) || !canTraverse(client, next.above())) continue;
+                double stepCost = cost(client, next, off);
+                double tentative = gScore.get(n.pos) + stepCost;
                 if (tentative < gScore.getOrDefault(next, Double.MAX_VALUE)) {
                     cameFrom.put(next, n.pos);
                     gScore.put(next, tentative);
@@ -47,21 +49,26 @@ public final class PathPlanner {
         return null;
     }
 
-    private static double cost(BlockPos off) {
-        if (off.getY() == 1) return 1.5;
-        if (off.getY() == -1) return 0.8;
-        return (off.getX() != 0 && off.getZ() != 0) ? 1.414 : 1.0;
+    private static boolean canTraverse(Minecraft client, BlockPos p) {
+        BlockState state = client.level.getBlockState(p);
+        if (state.isAir()) return true;
+        if (state.is(Blocks.BEDROCK) || state.is(Blocks.BARRIER)) return false;
+        if (state.is(Blocks.WATER) || state.is(Blocks.LAVA)) return false;
+        return state.getDestroySpeed(client.level, p) >= 0;
     }
 
-    private static double heuristic(BlockPos a, BlockPos b) {
-        return a.distManhattan(b);
+    private static double cost(Minecraft client, BlockPos next, BlockPos off) {
+        double base = off.getY() == 1 ? 1.5 : off.getY() == -1 ? 1.0
+                : (off.getX() != 0 && off.getZ() != 0 ? 1.414 : 1.0);
+        double dig = 0;
+        BlockState feet = client.level.getBlockState(next);
+        BlockState head = client.level.getBlockState(next.above());
+        if (!feet.isAir()) dig += 2.0 + Math.max(0, feet.getDestroySpeed(client.level, next)) * 0.5;
+        if (!head.isAir()) dig += 2.0 + Math.max(0, head.getDestroySpeed(client.level, next.above())) * 0.5;
+        return base + dig;
     }
 
-    private static boolean canStand(Minecraft client, BlockPos p) {
-        return client.level.getBlockState(p).isAir()
-            && client.level.getBlockState(p.above()).isAir()
-            && !client.level.getBlockState(p.below()).isAir();
-    }
+    private static double heuristic(BlockPos a, BlockPos b) { return a.distManhattan(b); }
 
     private static List<BlockPos> reconstruct(Map<BlockPos, BlockPos> cameFrom, BlockPos end) {
         LinkedList<BlockPos> path = new LinkedList<>();
