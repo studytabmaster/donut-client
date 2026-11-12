@@ -1,6 +1,8 @@
+// language: Java, file: src/client/java/dev/donut/client/DonutClient.java
 package dev.donut.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import dev.donut.client.automine.AutoMineController;
 import dev.donut.client.config.ClientConfig;
 import dev.donut.client.config.ConfigStore;
 import dev.donut.client.chunkfinder.ChunkFinderScanner;
@@ -23,6 +25,7 @@ import dev.donut.client.gui.AutoBuilderScreen;
 import dev.donut.client.gui.AutoBuilderHud;
 import dev.donut.client.gui.ProgressBarHud;
 import dev.donut.client.progress.ProgressTimers;
+import dev.donut.client.streaming.HideXpBar;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -45,6 +48,8 @@ import org.lwjgl.glfw.GLFW;
 
 public final class DonutClient implements ClientModInitializer {
     public static final String MOD_ID = "donut";
+    private static DonutClient HOLDER;
+
     private ConfigStore store;
     private ClientConfig config;
     private ChunkFinderScanner chunkScanner;
@@ -53,9 +58,16 @@ public final class DonutClient implements ClientModInitializer {
     private dev.donut.client.sound.SoundDetectorController soundDetector;
     private BlockEspController blockEsp;
     private dev.donut.client.staff.StaffDetectorController staffDetector;
+    private AutoMineController autoMine;
+    private HideXpBar hideXpBar;
+
+    public static boolean hideXpBarActive() {
+        return HOLDER != null && HOLDER.hideXpBar != null && HOLDER.hideXpBar.shouldHide();
+    }
 
     @Override
     public void onInitializeClient() {
+        HOLDER = this;
         GlassPanel.initialize();
         ProgressBarHud.initialize();
         store = new ConfigStore(FabricLoader.getInstance().getConfigDir().resolve("donut-client.json"));
@@ -67,6 +79,8 @@ public final class DonutClient implements ClientModInitializer {
         lightDebug = new dev.donut.client.light.LightDebugScanner(config);
         soundDetector = new dev.donut.client.sound.SoundDetectorController(config);
         blockEsp = new BlockEspController(config);
+        autoMine = new AutoMineController(config);
+        hideXpBar = new HideXpBar(config);
         staffDetector = new dev.donut.client.staff.StaffDetectorController(config, this::save);
         ClientTickEvents.END_CLIENT_TICK.register(auto -> {
             dev.donut.client.spectrebuilder.BuilderPlacement.tick(auto);
@@ -101,10 +115,13 @@ public final class DonutClient implements ClientModInitializer {
         KeyMapping sounds = bind("toggle_sound_detector", InputConstants.UNKNOWN.getValue(), category);
         KeyMapping blocks = bind("toggle_block_esp", InputConstants.UNKNOWN.getValue(), category);
         KeyMapping staff = bind("toggle_staff_detector", InputConstants.UNKNOWN.getValue(), category);
+        KeyMapping autoMineKey = bind("toggle_auto_mine", InputConstants.UNKNOWN.getValue(), category);
+        KeyMapping hideXpBarKey = bind("toggle_hide_xp_bar", InputConstants.UNKNOWN.getValue(), category);
         KeyMapping acknowledgeSound = bind("acknowledge_sound", InputConstants.UNKNOWN.getValue(), category);
         KeyMapping muteSound = bind("mute_sound", InputConstants.UNKNOWN.getValue(), category);
         KeyMapping soundHistory = bind("sound_history", InputConstants.UNKNOWN.getValue(), category);
-        ModuleKeybinds.initialize(camera, builder, chunks, bright, flight, progress, names, hotbar, amethyst, light, sounds, blocks, staff);
+        ModuleKeybinds.initialize(camera, builder, chunks, bright, flight, progress, names, hotbar,
+                amethyst, light, sounds, blocks, staff, autoMineKey, hideXpBarKey);
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             ProgressTimers.tick(config);
@@ -175,6 +192,13 @@ public final class DonutClient implements ClientModInitializer {
                 config.blockEsp.enabled = !config.blockEsp.enabled; save();
             }
             blockEsp.tick(client);
+            if (ModuleKeybinds.consumePress(client, 15) && !inputBlocked && client.screen == null && client.player != null) {
+                config.autoMine.enabled = !config.autoMine.enabled; save();
+            }
+            autoMine.tick(client);
+            if (ModuleKeybinds.consumePress(client, 16) && !inputBlocked && client.screen == null && client.player != null) {
+                config.hideXpBar.enabled = !config.hideXpBar.enabled; save();
+            }
             if (ModuleKeybinds.consumePress(client, 14) && !inputBlocked && client.screen == null && client.player != null) {
                 config.staffDetector.enabled = !config.staffDetector.enabled; save();
             }
@@ -189,49 +213,4 @@ public final class DonutClient implements ClientModInitializer {
             }
         });
 
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "status"), (graphics, delta) -> {
-            Minecraft client = Minecraft.getInstance();
-            if (!config.showHud || client.player == null || client.screen != null || client.options.hideGui) {
-                ModuleArrayList.reset();
-                return;
-            }
-            ModuleArrayList.render(graphics, client.font, client.getWindow().getGuiScaledWidth(), config, freecam.isActive());
-            AutoBuilderHud.render(graphics, client.font, client.getWindow().getGuiScaledHeight(), config);
-        });
-
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "progress_bar"), (graphics, delta) -> {
-            Minecraft client = Minecraft.getInstance();
-            if (!config.progressBar.enabled || client.player == null || client.screen != null || client.options.hideGui) return;
-            ProgressBarHud.render(graphics, config, config.progressBar.completedStages);
-        });
-
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "base_finder_inspect"),
-                (graphics, delta) -> BaseFinderPanel.render(graphics, config, chunkScanner));
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "sound_alerts"), (graphics, delta) ->
-                dev.donut.client.gui.SoundAlertHud.render(graphics, config, soundDetector.alerts()));
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "block_esp"), (graphics, delta) ->
-                BlockEspHud.render(graphics, config, blockEsp));
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "staff_detector"), (graphics, delta) ->
-                dev.donut.client.gui.StaffDetectorHud.render(graphics, config, staffDetector));
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> { staffDetector.disconnect(); blockEsp.disconnect(); soundDetector.disconnect(); chunkScanner.clear(); amethystScanner.clear(); lightDebug.clear(); freecam.disable(); fly.clientDisconnected(handler, client); autoBuilder.disconnect(); });
-        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
-            ProgressTimers.captureAndPause(config);
-            fullbright.close();
-            freecam.disable();
-            fly.disable();
-            autoBuilder.disconnect();
-            save();
-            lightDebug.close();
-            blockEsp.close();
-            soundDetector.disconnect();
-            staffDetector.disconnect();
-            renderer.close();
-        });
-    }
-
-    private KeyMapping bind(String name, int key, KeyMapping.Category category) {
-        return KeyBindingHelper.registerKeyBinding(new KeyMapping("key.donut." + name, InputConstants.Type.KEYSYM, key, category));
-    }
-
-    private void save() { store.save(config); }
-}
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath
