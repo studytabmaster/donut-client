@@ -17,7 +17,6 @@ public final class MovementController {
         Vec3 diff = target.subtract(client.player.position());
         float baseYaw = (float) Math.toDegrees(Math.atan2(-diff.x, diff.z));
 
-        // Occasional small lateral deviation.
         if (strafeTicks <= 0) {
             strafeSign = RNG.nextBoolean() ? 1 : -1;
             strafeTicks = 8 + RNG.nextInt(12);
@@ -26,8 +25,8 @@ public final class MovementController {
         float yawNoise = (RNG.nextFloat() - 0.5f) * 1.2f + strafeSign * 0.6f;
         client.player.setYRot(baseYaw + yawNoise);
         client.options.keyUp.setDown(true);
-        client.options.keyLeft.setDown(strafeSign < 0 && RNG.nextFloat() < 0.08f);
-        client.options.keyRight.setDown(strafeSign > 0 && RNG.nextFloat() < 0.08f);
+        client.options.keyLeft.setDown(false);
+        client.options.keyRight.setDown(false);
 
         boolean needJump = next.getY() > client.player.blockPosition().getY();
         Vec3 pos = client.player.position();
@@ -39,11 +38,16 @@ public final class MovementController {
             needJump = true;
         }
         client.options.keyJump.setDown(needJump);
+    }
 
-        // Brief pause to break constant-velocity movement.
-        if (RNG.nextFloat() < 0.015f) {
-            client.options.keyUp.setDown(false);
-        }
+    public static void releaseKeys(Minecraft client) {
+        client.options.keyUp.setDown(false);
+        client.options.keyDown.setDown(false);
+        client.options.keyLeft.setDown(false);
+        client.options.keyRight.setDown(false);
+        client.options.keyJump.setDown(false);
+        client.options.keyShift.setDown(false);
+        client.options.keySprint.setDown(false);
     }
 
     public static void reset() {
