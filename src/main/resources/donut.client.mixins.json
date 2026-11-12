@@ -29,7 +29,8 @@
     "StaffDetectorPacketMixin",
     "SoundEntityEventAccessor",
     "SoundDetectorLocalMixin",
-    "SoundDetectorClientSoundMixin"
+    "SoundDetectorClientSoundMixin",
+    "ExperienceBarRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1
