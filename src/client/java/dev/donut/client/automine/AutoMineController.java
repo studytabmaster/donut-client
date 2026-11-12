@@ -6,6 +6,7 @@ import dev.donut.client.config.ClientConfig;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Random;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
@@ -15,6 +16,7 @@ public final class AutoMineController implements AutoCloseable {
     private enum State { IDLE, SELECT_TARGET, PATHFIND, APPROACH, MINE, BATCH_MINE, RECOVER }
 
     private static final int STUCK_THRESHOLD_TICKS = 100;
+    private static final Random RNG = new Random();
 
     private final ClientConfig config;
     private final TargetQueue targets = new TargetQueue();
@@ -30,15 +32,20 @@ public final class AutoMineController implements AutoCloseable {
     public void tick(Minecraft client) {
         if (client.player == null || client.level == null || !config.autoMine.enabled) {
             state = State.IDLE;
+            DigController.reset();
+            MovementController.reset();
             resetStuck();
             return;
         }
         if (SafetyGuard.isUnsafe(client)) {
             state = State.IDLE;
+            DigController.reset();
+            MovementController.reset();
             resetStuck();
             return;
         }
         targets.tickBlacklist();
+        DigController.tickRotation(client);
 
         switch (state) {
             case IDLE, SELECT_TARGET -> selectTarget(client);
@@ -52,12 +59,12 @@ public final class AutoMineController implements AutoCloseable {
 
     private void selectTarget(Minecraft client) {
         BlockEspController esp = BlockEspController.get();
-        if (esp == null || !esp.status().startsWith("Ready")) {
-            return;
-        }
+        if (esp == null || !esp.status().startsWith("Ready")) return;
         targets.refresh(client.player.position());
         current = targets.poll();
         if (current == null) { state = State.IDLE; return; }
+        // Random reaction delay before pathfinding.
+        if (RNG.nextFloat() < 0.3f) return;
         path = PathPlanner.findPath(client, client.player.blockPosition(), current.pos());
         pathIndex = 0;
         resetStuck();
@@ -71,10 +78,7 @@ public final class AutoMineController implements AutoCloseable {
     }
 
     private void pathfind(Minecraft client) {
-        if (path == null || pathIndex >= path.size()) {
-            state = State.APPROACH;
-            return;
-        }
+        if (path == null || pathIndex >= path.size()) { state = State.APPROACH; return; }
         BlockPos next = path.get(pathIndex);
         MovementController.stepTo(client, next);
         if (client.player.blockPosition().equals(next)) {
@@ -89,11 +93,7 @@ public final class AutoMineController implements AutoCloseable {
         if (current == null) { state = State.SELECT_TARGET; return; }
         if (DigController.inRange(client, current.pos())) {
             batchList = batchTargets(client);
-            if (!batchList.isEmpty()) {
-                state = State.BATCH_MINE;
-            } else {
-                state = State.MINE;
-            }
+            state = batchList.isEmpty() ? State.MINE : State.BATCH_MINE;
         } else if (++stuckTicks > STUCK_THRESHOLD_TICKS) {
             state = State.RECOVER;
         } else {
@@ -144,6 +144,7 @@ public final class AutoMineController implements AutoCloseable {
         current = null;
         path = null;
         batchList.clear();
+        DigController.reset();
         MovementController.reset();
         client.options.keyUp.setDown(false);
         client.options.keyJump.setDown(client.player.onGround());
@@ -173,6 +174,7 @@ public final class AutoMineController implements AutoCloseable {
         current = null;
         batchList.clear();
         resetStuck();
+        DigController.reset();
         MovementController.reset();
     }
 }
